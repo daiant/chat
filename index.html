@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Socket.IO chat</title>
+  <link rel="stylesheet" href="index.css" type="text/css">
+</head>
+
+<body>
+  <form action="" id="login-form" class="login">
+    <label for="username">Select username</label>
+    <input type="text" id="username" placeholder="John Doe">
+    <input type="submit" value="Entrar">
+  </form>
+  <div class="wrapper">
+    <div class="left">
+      <ul id="users"></ul>
+    </div>
+    <div class="right">
+      <ul id="messages"></ul>
+      <span id="typing">User is typing...</span>
+      <form id="form" action="">
+        <input id="input" autocomplete="off" /><button>Enviar</button>
+      </form>
+    </div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const URL = 'http://localhost:3000';
+    const socket = io(URL, { autoConnect: false });
+    const loginForm = document.querySelector('#login-form');
+    const username = document.querySelector('#username')
+    var messageToUser = undefined;
+
+    const persistedUser = localStorage.getItem('user');
+
+    var isUserConnected = persistedUser !== null;
+
+    if (isUserConnected) {
+      loginForm.remove();
+      createUser({ username: persistedUser }, true)
+      socket.auth = { username: persistedUser };
+      socket.connect();
+    }
+    loginForm.addEventListener('submit', function (e) {
+
+      e.preventDefault();
+      socket.auth = { username: username.value };
+      socket.connect();
+      if (!isUserConnected) createUser({ username: username.value })
+
+      // Save user to localStorage
+      localStorage.setItem('user', username.value)
+      // Hide loginForm
+      isUserConnected = true;
+      loginForm.remove();
+
+    });
+
+    socket.on('user connected', function (user) {
+      createUser(user);
+    });
+
+    function createUser(user, isOwn = false) {
+      const users = document.querySelector('#users');
+      const userElement = document.createElement('li');
+      userElement.textContent = user.username;
+      if(isOwn) userElement.textContent += " (that's you!)";
+      else {
+        userElement.addEventListener('click', function() {
+          messageToUser = user;
+        });
+      }
+      users.appendChild(userElement);
+    }
+
+    const form = document.querySelector('#form');
+    const input = document.querySelector('#input');
+    const messages = document.querySelector('#messages');
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (input.value && messageToUser) {
+        socket.emit('chat message', {
+          content: input.value,
+          to: messageToUser.userID
+        });
+        createMessage(input.value, true);
+
+        input.value = '';
+      }
+    });
+
+    input.addEventListener('input', function (e) {
+      socket.emit('typing', socket.id);
+    });
+
+    var timeouts = [];
+    socket.on('typing', function (id) {
+      const typing = document.querySelector('#typing');
+      typing.style.display = 'block';
+
+      timeouts.push(setTimeout(function () { typing.style.display = 'none' }, 3000));
+      for (var i = 0; i < timeouts.length - 1; i++) {
+        clearTimeout(timeouts[i]);
+      }
+    })
+
+    socket.on('chat message', function ({content, from}) {
+      console.log("🚀 ~ file: index.html ~ line 112 ~ content, from", content, from)
+      createMessage(content, false);
+    });
+
+    function createMessage(msg, own) {
+      const item = document.createElement('li');
+      item.textContent = msg;
+      if (own) item.classList.add('right');
+      messages.appendChild(item);
+      // window.scrollTo(0, document.body.scrollHeight);
+    }
+  </script>
+</body>
+
+</html>
